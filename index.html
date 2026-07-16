@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Audio Player</title>
+    <!-- 引入 Tailwind CSS 用於快速排版與樣式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome 用於播放控制圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入 Google 字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* 自定義進度條樣式 */
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #a855f7; /* Tailwind purple-500 */
+            cursor: pointer;
+            margin-top: -6px; 
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        /* 滾動條美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2); 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4); 
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 min-h-screen flex items-center justify-center p-4 text-white">
+
+    <!-- 播放器主容器 (Glassmorphism 風格) -->
+    <div class="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-md">
+        
+        <!-- 頂部資訊 -->
+        <div class="flex justify-between items-center mb-6 text-white/70 text-sm font-semibold">
+            <span>正在播放</span>
+            <i class="fa-solid fa-music"></i>
+        </div>
+
+        <!-- 唱片封面/裝飾圖 -->
+        <div class="w-full flex justify-center mb-8">
+            <div id="cover-art" class="w-48 h-48 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30 transition-transform duration-700">
+                <div class="w-12 h-12 bg-indigo-900 rounded-full border-4 border-white/20"></div>
+            </div>
+        </div>
+
+        <!-- 歌曲資訊 -->
+        <div class="text-center mb-6">
+            <h2 id="track-title" class="text-2xl font-bold text-white mb-1 truncate">歌曲名稱加載中...</h2>
+            <p class="text-white/60 text-sm">本地音檔</p>
+        </div>
+
+        <!-- 進度條 -->
+        <div class="mb-6">
+            <div class="flex justify-between text-xs text-white/60 mb-2">
+                <span id="current-time">0:00</span>
+                <span id="duration-time">0:00</span>
+            </div>
+            <input type="range" id="progress-bar" class="w-full" value="0" min="0" max="100" step="0.1">
+        </div>
+
+        <!-- 控制按鈕 -->
+        <div class="flex items-center justify-center gap-6 mb-8">
+            <button id="prev-btn" class="text-white/70 hover:text-white transition-colors transform hover:scale-110">
+                <i class="fa-solid fa-backward-step fa-xl"></i>
+            </button>
+            
+            <button id="play-btn" class="w-16 h-16 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/40 transition-all transform hover:scale-105 focus:outline-none">
+                <i id="play-icon" class="fa-solid fa-play fa-xl ml-1"></i>
+            </button>
+            
+            <button id="next-btn" class="text-white/70 hover:text-white transition-colors transform hover:scale-110">
+                <i class="fa-solid fa-forward-step fa-xl"></i>
+            </button>
+        </div>
+
+        <!-- 音量控制 -->
+        <div class="flex items-center gap-3 mb-6 bg-white/5 rounded-full px-4 py-2">
+            <i class="fa-solid fa-volume-low text-white/60 text-sm"></i>
+            <input type="range" id="volume-bar" class="w-full" value="100" min="0" max="100">
+            <i class="fa-solid fa-volume-high text-white/60 text-sm"></i>
+        </div>
+
+        <!-- 播放列表區塊 -->
+        <div class="border-t border-white/10 pt-4">
+            <h3 class="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-list"></i> 播放列表
+            </h3>
+            <ul id="playlist" class="space-y-2 max-h-40 overflow-y-auto pr-2">
+                <!-- 播放列表項目將由 JavaScript 動態生成 -->
+            </ul>
+        </div>
+
+    </div>
+
+    <!-- 隱藏的 Audio 元素 -->
+    <audio id="audio-player"></audio>
+
+    <script>
+        // 修正網址並建立歌曲清單資料
+        // 注意：原始提供之 gi@hub 已修正為 github，並處理了空格編碼 (%20)
+        const tracks = [
+            {
+                title: "455",
+                url: "https://raw.githubusercontent.com/statsean/Jin/main/455.mp3"
+            },
+            {
+                title: "Twinkle Twinkle Little Star",
+                url: "https://raw.githubusercontent.com/statsean/Jin/main/Twinkle%20Twinkle%20Little%20Star.mp3"
+            },
+            {
+                title: "2025-12-24 BD",
+                url: "https://raw.githubusercontent.com/statsean/Jin/main/2025-12-24%20BD.mp3"
+            }
+        ];
+
+        // 狀態變數
+        let currentTrackIndex = 0;
+        let isPlaying = false;
+        let isDragging = false; // 追蹤進度條拖動狀態
+
+        // 取得 DOM 元素
+        const audio = document.getElementById('audio-player');
+        const playBtn = document.getElementById('play-btn');
+        const playIcon = document.getElementById('play-icon');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        
+        const progressBar = document.getElementById('progress-bar');
+        const volumeBar = document.getElementById('volume-bar');
+        
+        const currentTimeEl = document.getElementById('current-time');
+        const durationTimeEl = document.getElementById('duration-time');
+        
+        const trackTitleEl = document.getElementById('track-title');
+        const playlistEl = document.getElementById('playlist');
+        const coverArt = document.getElementById('cover-art');
+
+        // 格式化時間 (將秒數轉換為 mm:ss 格式)
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds < 0) return "0:00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        // 載入歌曲
+        function loadTrack(index) {
+            currentTrackIndex = index;
+            const track = tracks[currentTrackIndex];
+            
+            // 處理錯誤：當遇到非音檔錯誤時可以顯示提示
+            audio.src = track.url;
+            audio.load();
+            
+            // 更新 UI
+            trackTitleEl.textContent = track.title;
+            updatePlaylistUI();
+            
+            // 重置時間顯示
+            currentTimeEl.textContent = "0:00";
+            progressBar.value = 0;
+        }
+
+        // 播放音樂
+        function playTrack() {
+            try {
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        isPlaying = true;
+                        playIcon.classList.remove('fa-play');
+                        playIcon.classList.add('fa-pause');
+                        playBtn.querySelector('i').classList.remove('ml-1'); // 移除播放圖標的微調邊距
+                        coverArt.classList.add('animate-spin-slow');
+                    }).catch(error => {
+                        console.error("播放失敗, 可能是瀏覽器自動播放限制或是檔案連結無效:", error);
+                        alert("播放失敗，請確認音檔連結是否有效或允許網頁播放音效。");
+                    });
+                }
+            } catch (err) {
+                console.error("Audio play error", err);
+            }
+        }
+
+        // 暫停音樂
+        function pauseTrack() {
+            audio.pause();
+            isPlaying = false;
+            playIcon.classList.remove('fa-pause');
+            playIcon.classList.add('fa-play');
+            playBtn.querySelector('i').classList.add('ml-1');
+            coverArt.classList.remove('animate-spin-slow');
+        }
+
+        // 切換播放/暫停狀態
+        function togglePlay() {
+            if (isPlaying) {
+                pauseTrack();
+            } else {
+                playTrack();
+            }
+        }
+
+        // 上一首
+        function prevTrack() {
+            currentTrackIndex--;
+            if (currentTrackIndex < 0) {
+                currentTrackIndex = tracks.length - 1; // 循環播放
+            }
+            loadTrack(currentTrackIndex);
+            if (isPlaying) playTrack();
+        }
+
+        // 下一首
+        function nextTrack() {
+            currentTrackIndex++;
+            if (currentTrackIndex > tracks.length - 1) {
+                currentTrackIndex = 0; // 循環播放
+            }
+            loadTrack(currentTrackIndex);
+            if (isPlaying) playTrack();
+        }
+
+        // 更新進度條與時間顯示
+        function updateProgress(e) {
+            const { duration, currentTime } = e.srcElement;
+            
+            // 更新總時間
+            if (duration && !isNaN(duration)) {
+                durationTimeEl.textContent = formatTime(duration);
+            }
+
+            // 更新當前時間和進度條 (僅在未拖動進度條時更新)
+            if (!isDragging && duration) {
+                const progressPercent = (currentTime / duration) * 100;
+                progressBar.value = progressPercent;
+                currentTimeEl.textContent = formatTime(currentTime);
+            }
+        }
+
+        // 手動設定進度條
+        function setProgress(e) {
+            const width = this.clientWidth;
+            // 處理不同事件(click 或 input)取得正確的值
+            let val = e.target.value;
+            const duration = audio.duration;
+            
+            if (duration) {
+                audio.currentTime = (val / 100) * duration;
+                currentTimeEl.textContent = formatTime(audio.currentTime);
+            }
+        }
+
+        // 設定音量
+        function setVolume(e) {
+            const vol = e.target.value / 100;
+            audio.volume = vol;
+        }
+
+        // 渲染播放列表 UI
+        function renderPlaylist() {
+            playlistEl.innerHTML = ''; // 清空
+            
+            tracks.forEach((track, index) => {
+                const li = document.createElement('li');
+                li.className = `p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all duration-200 hover:bg-white/10 group ${index === currentTrackIndex ? 'bg-white/10 border border-purple-500/30' : 'bg-white/5'}`;
+                
+                li.innerHTML = `
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-8 h-8 rounded bg-purple-900/50 flex items-center justify-center flex-shrink-0 text-white/50 group-hover:text-purple-400">
+                            ${index === currentTrackIndex && isPlaying 
+                                ? '<i class="fa-solid fa-chart-bar fa-fade text-purple-400"></i>' 
+                                : `<i class="fa-solid fa-music"></i>`}
+                        </div>
+                        <span class="text-sm font-medium truncate ${index === currentTrackIndex ? 'text-purple-300' : 'text-white/80'}">${track.title}</span>
+                    </div>
+                `;
+                
+                // 點擊列表播放該曲目
+                li.addEventListener('click', () => {
+                    loadTrack(index);
+                    playTrack();
+                });
+                
+                playlistEl.appendChild(li);
+            });
+        }
+
+        // 更新播放列表的活躍狀態樣式
+        function updatePlaylistUI() {
+            renderPlaylist(); // 為了簡化，直接重新渲染。若是大型列表建議單獨修改 class
+        }
+
+        // 綁定事件監聽器
+        playBtn.addEventListener('click', togglePlay);
+        prevBtn.addEventListener('click', prevTrack);
+        nextBtn.addEventListener('click', nextTrack);
+        
+        // 音檔事件
+        audio.addEventListener('timeupdate', updateProgress);
+        audio.addEventListener('loadedmetadata', (e) => {
+             durationTimeEl.textContent = formatTime(e.target.duration);
+        });
+        audio.addEventListener('ended', nextTrack); // 播放完畢自動下一首
+        
+        // 進度條事件處理 (防止拖動時發生衝突)
+        progressBar.addEventListener('input', (e) => {
+            isDragging = true;
+            // 拖動時即時更新時間顯示
+            if (audio.duration) {
+                currentTimeEl.textContent = formatTime((e.target.value / 100) * audio.duration);
+            }
+        });
+        progressBar.addEventListener('change', (e) => {
+            setProgress(e);
+            isDragging = false;
+        });
+
+        // 音量條事件
+        volumeBar.addEventListener('input', setVolume);
+
+        // 新增 CSS 動畫類別以供唱片旋轉
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .animate-spin-slow {
+                animation: spin 8s linear infinite;
+            }
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 初始化播放器
+        loadTrack(currentTrackIndex);
+        audio.volume = 1; // 預設滿音量
+
+    </script>
+</body>
+</html>
